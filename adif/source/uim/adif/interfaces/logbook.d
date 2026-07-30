@@ -14,6 +14,9 @@ struct ADIFConfig {
   bool includeHeader = true;
   bool strictMode;
   bool upperCaseFieldNames = true;
+  bool validateDeclaredLengths = true;
+  bool validateFieldDataTypes = true;
+  bool allowUnknownFields = true;
 }
 
 struct ADIFField {
@@ -69,6 +72,9 @@ interface IADIFService {
   ADIFDocument parseDocument(string payload);
   string serializeDocument(ADIFDocument document);
   ADIFResult validateDocument(ADIFDocument document);
+  ADIFDocument importLoTW(string payload);
+  string exportLoTW(ADIFDocument document);
+  string exportCabrillo(ADIFDocument document, string contestName = "GENERAL", string operatorCall = "");
 
   bool parseDocumentAsync(string payload, ADIFDocumentHandler handler);
   bool serializeDocumentAsync(ADIFDocument document, ADIFResultHandler handler);

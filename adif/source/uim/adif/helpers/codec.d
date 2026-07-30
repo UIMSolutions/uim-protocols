@@ -97,6 +97,62 @@ ADIFRecord[] adifParseRecords(string payload, bool strictMode = false) {
   return adifParseDocument(payload, strictMode).records;
 }
 
+ADIFResult adifValidateDocument(ADIFDocument document, ADIFConfig config) {
+  if (document.records.length == 0) {
+    return ADIFResultErr(422, "ADIF document does not contain any records.");
+  }
+
+  ulong fieldCount;
+
+  foreach (index, record; document.records) {
+    if (record.fields.length == 0) {
+      return ADIFResultErr(422, "ADIF record has no fields.", cast(ulong) (index + 1), fieldCount);
+    }
+
+    foreach (field; record.fields) {
+      fieldCount++;
+      auto issue = adifValidateField(field, config);
+      if (issue.length > 0) {
+        return ADIFResultErr(422, issue, cast(ulong) (index + 1), fieldCount);
+      }
+    }
+
+    if (config.strictMode) {
+      if (ADIFRecordValue(record, "CALL").length == 0) {
+        return ADIFResultErr(422, "ADIF record is missing CALL in strict mode.", cast(ulong) (index + 1), fieldCount);
+      }
+
+      if (ADIFRecordValue(record, "QSO_DATE").length == 0) {
+        return ADIFResultErr(422, "ADIF record is missing QSO_DATE in strict mode.", cast(ulong) (index + 1), fieldCount);
+      }
+    }
+  }
+
+  return ADIFResultOk(200, "validated", cast(ulong) document.records.length, fieldCount);
+}
+
+bool adifIsKnownField(string fieldName) {
+  return containsString(adifKnownFieldNames, adifNormalizeFieldName(fieldName));
+}
+
+string adifInferDataType(string fieldName) {
+  auto normalized = adifNormalizeFieldName(fieldName);
+
+  if (normalized == "QSO_DATE") {
+    return "D";
+  }
+
+  if (normalized == "TIME_ON" || normalized == "TIME_OFF") {
+    return "T";
+  }
+
+  if (normalized == "FREQ" || normalized == "RST_SENT" || normalized == "RST_RCVD" || normalized == "CQZ" || normalized == "ITUZ") {
+    return "N";
+  }
+
+  return "";
+}
+
 string adifSerializeField(const(ADIFField) field, bool upperCaseFieldNames = true) {
   auto normalizedName = upperCaseFieldNames ? adifNormalizeFieldName(field.name) : field.name.strip();
   auto declaredLength = cast(size_t) field.value.length;
@@ -190,6 +246,162 @@ private string adifAsciiUpper(string value) {
 
   return buffer.data;
 }
+
+private string adifValidateField(const(ADIFField) field, ADIFConfig config) {
+  auto normalizedName = adifNormalizeFieldName(field.name);
+  if (normalizedName.length == 0) {
+    return "ADIF field name is empty.";
+  }
+
+  if (config.validateDeclaredLengths && field.declaredLength != cast(size_t) field.value.length) {
+    return "ADIF field " ~ normalizedName ~ " declared length does not match value length.";
+  }
+
+  auto inferredType = adifInferDataType(normalizedName);
+  auto effectiveType = field.dataType.length > 0 ? adifAsciiUpper(field.dataType.strip()) : inferredType;
+
+  if (config.validateFieldDataTypes && field.dataType.length > 0 && inferredType.length > 0 && effectiveType != inferredType) {
+    return "ADIF field " ~ normalizedName ~ " uses incompatible data type " ~ effectiveType ~ ".";
+  }
+
+  if (!config.allowUnknownFields && !adifIsKnownField(normalizedName)) {
+    return "ADIF field " ~ normalizedName ~ " is not in the known field catalog.";
+  }
+
+  if (config.validateFieldDataTypes && effectiveType.length > 0) {
+    auto typeIssue = validateValueByType(normalizedName, field.value, effectiveType);
+    if (typeIssue.length > 0) {
+      return typeIssue;
+    }
+  }
+
+  if (normalizedName == "CALL" && !isValidCallsign(field.value)) {
+    return "ADIF CALL contains unsupported characters.";
+  }
+
+  if (normalizedName == "BAND" && !containsString(adifBandNames, adifAsciiUpper(field.value.strip()))) {
+    return "ADIF BAND is not recognized.";
+  }
+
+  if (normalizedName == "MODE" && field.value.strip().length == 0) {
+    return "ADIF MODE must not be empty.";
+  }
+
+  return "";
+}
+
+private string validateValueByType(string fieldName, string value, string dataType) {
+  if (dataType == "D") {
+    if (value.length != 8 || !isDigitsOnly(value)) {
+      return "ADIF field " ~ fieldName ~ " must use YYYYMMDD date format.";
+    }
+    return "";
+  }
+
+  if (dataType == "T") {
+    if ((value.length != 4 && value.length != 6) || !isDigitsOnly(value)) {
+      return "ADIF field " ~ fieldName ~ " must use HHMM or HHMMSS time format.";
+    }
+    return "";
+  }
+
+  if (dataType == "N") {
+    if (!isNumericValue(value)) {
+      return "ADIF field " ~ fieldName ~ " must be numeric.";
+    }
+    return "";
+  }
+
+  if (dataType == "B") {
+    auto normalized = adifAsciiUpper(value.strip());
+    if (normalized != "Y" && normalized != "N" && normalized != "TRUE" && normalized != "FALSE") {
+      return "ADIF field " ~ fieldName ~ " must be boolean.";
+    }
+  }
+
+  return "";
+}
+
+private bool isDigitsOnly(string value) {
+  if (value.length == 0) {
+    return false;
+  }
+
+  foreach (ch; value) {
+    if (ch < '0' || ch > '9') {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+private bool isNumericValue(string value) {
+  if (value.length == 0) {
+    return false;
+  }
+
+  bool decimalSeen;
+
+  foreach (index, ch; value) {
+    if (ch >= '0' && ch <= '9') {
+      continue;
+    }
+
+    if ((ch == '+' || ch == '-') && index == 0) {
+      continue;
+    }
+
+    if (ch == '.' && !decimalSeen) {
+      decimalSeen = true;
+      continue;
+    }
+
+    return false;
+  }
+
+  return true;
+}
+
+private bool isValidCallsign(string value) {
+  auto normalized = adifAsciiUpper(value.strip());
+  if (normalized.length == 0) {
+    return false;
+  }
+
+  foreach (ch; normalized) {
+    auto isAlpha = ch >= 'A' && ch <= 'Z';
+    auto isDigit = ch >= '0' && ch <= '9';
+    if (!isAlpha && !isDigit && ch != '/' && ch != '-') {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+private bool containsString(const(string)[] haystack, string needle) {
+  foreach (candidate; haystack) {
+    if (candidate == needle) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+private immutable string[] adifKnownFieldNames = [
+  "ADIF_VER", "ADDRESS", "BAND", "CALL", "COMMENT", "CONTEST_ID", "CQZ",
+  "DXCC", "FREQ", "GRIDSQUARE", "ITUZ", "MODE", "NAME", "OPERATOR",
+  "PROGRAMID", "PROGRAMVERSION", "QSO_DATE", "QSO_DATE_OFF", "RST_RCVD",
+  "RST_SENT", "STATION_CALLSIGN", "SUBMODE", "TIME_OFF", "TIME_ON"
+];
+
+private immutable string[] adifBandNames = [
+  "2190M", "630M", "560M", "160M", "80M", "60M", "40M", "30M", "20M",
+  "17M", "15M", "12M", "10M", "6M", "4M", "2M", "1.25M", "70CM",
+  "33CM", "23CM", "13CM", "9CM", "6CM", "3CM"
+];
 
 private size_t findChar(string value, char needle, size_t startIndex) {
   foreach (index; startIndex .. value.length) {
@@ -294,4 +506,8 @@ unittest {
   ADIFConfig config;
   auto serialized = adifSerializeDocument(document, config);
   assert(serialized.indexOf("<CALL:6>DL1ABC") >= 0);
+
+  auto invalid = adifParseDocument("<EOH><CALL:6>DL 1AB<QSO_DATE:8:D>20260730<EOR>");
+  auto validation = adifValidateDocument(invalid, config);
+  assert(!validation.success);
 }

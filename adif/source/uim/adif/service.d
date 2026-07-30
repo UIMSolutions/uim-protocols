@@ -96,31 +96,31 @@ class UIMADIFService : UIMObject, IADIFService {
       }
     }
 
-    if (document.records.length == 0) {
-      return ADIFResultErr(422, "ADIF document does not contain any records.");
+    return adifValidateDocument(document, _config);
+  }
+
+  ADIFDocument importLoTW(string payload) {
+    if (!_configured || payload.length == 0) {
+      return ADIFDocumentEmpty();
     }
 
-    ulong fieldCount;
+    return adifImportLoTW(payload, _config.strictMode);
+  }
 
-    foreach (index, record; document.records) {
-      fieldCount += cast(ulong) record.fields.length;
-
-      if (record.fields.length == 0) {
-        return ADIFResultErr(422, "ADIF record has no fields.", cast(ulong) index, fieldCount);
-      }
-
-      if (_config.strictMode) {
-        if (ADIFRecordValue(record, "CALL").length == 0) {
-          return ADIFResultErr(422, "ADIF record is missing CALL in strict mode.", cast(ulong) (index + 1), fieldCount);
-        }
-
-        if (ADIFRecordValue(record, "QSO_DATE").length == 0) {
-          return ADIFResultErr(422, "ADIF record is missing QSO_DATE in strict mode.", cast(ulong) (index + 1), fieldCount);
-        }
-      }
+  string exportLoTW(ADIFDocument document) {
+    if (!_configured || document.records.length == 0) {
+      return "";
     }
 
-    return ADIFResultOk(200, "validated", cast(ulong) document.records.length, fieldCount);
+    return adifExportLoTW(document, _config);
+  }
+
+  string exportCabrillo(ADIFDocument document, string contestName = "GENERAL", string operatorCall = "") {
+    if (!_configured || document.records.length == 0) {
+      return "";
+    }
+
+    return adifExportCabrillo(document, contestName, operatorCall);
   }
 
   bool parseDocumentAsync(string payload, ADIFDocumentHandler handler) {
@@ -197,4 +197,10 @@ unittest {
 
   auto serialized = service.serializeDocument(document);
   assert(serialized.length > 0);
+
+  auto lotw = service.exportLoTW(document);
+  assert(lotw.length > 0);
+
+  auto cabrillo = service.exportCabrillo(document, "TEST-CONTEST", "DL0XYZ");
+  assert(cabrillo.length > 0);
 }
