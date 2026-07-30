@@ -1,0 +1,35 @@
+name "protocol"
+description "A collection of protocols built up over eight years of experience with the D language, including Authorization and Trust Management, Job Scheduling, Malware Scanning, and Datasphere-like business data fabric protocol for BTP."
+homepage "https://www.....de/uim/protocols/protocol"
+authors "Ozan Nurettin Süel"
+copyright "Copyright © 2018 - 2026, ONS"
+license "Apache-2.0"
+dependency "uim-framework" version="~>26.7.2"
+
+targetType "library"
+targetName "uim-platform-protocol"
+targetPath "build"
+
+configuration "default" {
+	targetType "library"
+}
+configuration "modules" {
+	targetType "library"
+	versions "show_module"
+}
+configuration "tests" {
+	targetType "library"
+	versions "show_module" "show_test"
+}
+configuration "inits" {
+	targetType "library"
+	versions "show_module" "show_init"
+}
+configuration "calls" {
+	targetType "library"
+	versions "show_module" "show_test" "show_function"
+}
+configuration "verbose" {
+	targetType "library"
+	versions "show_module" "show_test" "show_init" "show_function"
+}
