@@ -18,12 +18,13 @@ dependency "gtk-d" version="~>3.11.0"
 // Internal Dependencies
 dependency ":protocol" version="*"
 
+dependency ":adatp3" version="*"
+dependency ":adif" version="*"
+dependency ":edifact" version="*"
 dependency ":ftam" version="*"
 dependency ":s2000m" version="*"
 dependency ":scim" version="*"
 dependency ":zugferd" version="*"
-
-// dependency ":abap-compiler" version="*"
 
 // Source files
 sourceFiles "./source/uim/protocols/all.d"
@@ -31,12 +32,13 @@ sourceFiles "./source/uim/protocols/all.d"
 // Subpackages
 subPackage "protocol"
 
+subPackage "adatp3"
+subPackage "adif"
+subPackage "edifact"
 subPackage "ftam"
 subPackage "s2000m"
 subPackage "scim"
 subPackage "zugferd"
-
-// subPackage "abap-compiler"
 
 buildRequirements "allowWarnings" "silenceDeprecations"
 buildOptions "ignoreDeprecations" "debugInfo"
