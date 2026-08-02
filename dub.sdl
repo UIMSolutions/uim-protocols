@@ -25,6 +25,7 @@ dependency ":edifact" version="*"
 dependency ":ftam" version="*"
 dependency ":s2000m" version="*"
 dependency ":scim" version="*"
+dependency ":uart" version="*"
 dependency ":zugferd" version="*"
 
 // Source files
@@ -40,6 +41,7 @@ subPackage "edifact"
 subPackage "ftam"
 subPackage "s2000m"
 subPackage "scim"
+subPackage "uart"
 subPackage "zugferd"
 
 buildRequirements "allowWarnings" "silenceDeprecations"
